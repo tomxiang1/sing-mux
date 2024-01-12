@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"sync"
+	"time"
 
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/bufio"
@@ -123,6 +124,8 @@ func (c *Client) openStream(ctx context.Context) (net.Conn, error) {
 	return &wrapStream{stream}, nil
 }
 
+var connTime int64 = time.Now().Unix()
+
 func (c *Client) offer(ctx context.Context) (abstractSession, error) {
 	c.access.Lock()
 	defer c.access.Unlock()
@@ -139,13 +142,18 @@ func (c *Client) offer(ctx context.Context) (abstractSession, error) {
 		sessions = append(sessions, element.Value)
 		element = element.Next()
 	}
+	
 	if c.brutal.Enabled {
-		if len(sessions) > 0 {
-			return sessions[0], nil
+		size := len(sessions)
+		if size > 0 && time.Now().Unix() - connTime < 180 {
+			return sessions[size-1], nil
 		}
+		connTime = time.Now().Unix()
 		return c.offerNew(ctx)
 	}
+	
 	session := common.MinBy(common.Filter(sessions, abstractSession.CanTakeNewRequest), abstractSession.NumStreams)
+	
 	if session == nil {
 		return c.offerNew(ctx)
 	}
